@@ -1,15 +1,30 @@
+# Backend
 fastapi
 uvicorn[standard]
 pydantic
+
+# Data handling
 pandas
 numpy
+
+# Visualization
 matplotlib
 seaborn
+
+# LangChain + LLM
 langchain==0.2.16
 langchain-core==0.2.41
 langchain-community==0.2.16
 langchain-groq==0.1.4
+
+# Environment variables
 python-dotenv
+
+# HTTP requests
 requests
+
+# Frontend
 streamlit
+
+# Optional (better performance & JSON handling)
 orjson
