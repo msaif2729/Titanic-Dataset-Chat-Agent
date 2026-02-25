@@ -1,18 +1,30 @@
 import streamlit as st
 import requests
 import base64
+import time
+import os
+from dotenv import load_dotenv
 
-API_URL = "http://127.0.0.1:8000/ask"
+load_dotenv()
+API_URL = os.getenv("BACKEND_API_URL") 
+
+if not API_URL:
+    # Default to localhost for development
+    API_URL = "http://127.0.0.1:8000/ask"
 
 st.set_page_config(
     page_title="Titanic Dataset Chat Agent",
     page_icon="🚢",
     layout="centered",
-    initial_sidebar_state="collapsed"  
+    initial_sidebar_state="collapsed"
 )
 
-st.title("🚢 Titanic Dataset Chat Agent")
-st.caption("Ask natural language questions about the Titanic dataset")
+st.markdown("<h1 style='text-align: center;'>🚢 Titanic Dataset Chat Agent</h1>", unsafe_allow_html=True)
+st.markdown(
+    "<p style='text-align: center; color: gray;'>Ask natural language questions about the Titanic dataset</p>",
+    unsafe_allow_html=True
+)
+st.markdown("<br>", unsafe_allow_html=True)
 
 # Session State
 if "chat_history" not in st.session_state:
@@ -21,23 +33,22 @@ if "chat_history" not in st.session_state:
 if "pending_question" not in st.session_state:
     st.session_state.pending_question = None
 
+
 # Backend Call Function
 def ask_backend(question):
     try:
         response = requests.post(
             API_URL,
             json={"question": question},
-            timeout=30 
+            timeout=30
         )
 
-        # If backend returns error status
         if response.status_code != 200:
             return {
                 "answer": f"Backend error (Status {response.status_code})",
                 "image": None
             }
 
-        # Try parsing JSON safely
         try:
             return response.json()
         except ValueError:
@@ -63,7 +74,8 @@ def ask_backend(question):
             "answer": f"Unexpected error: {str(e)}",
             "image": None
         }
-    
+
+
 # Sidebar Example Questions
 with st.sidebar:
     st.header("Example Questions")
@@ -73,11 +85,11 @@ with st.sidebar:
         "What was the average ticket fare?",
         "Show me a histogram of passenger ages",
         "How many passengers embarked from each port?",
+        "Show survival count by passenger class",
+        "Which class had the highest survival rate?",
         "How many passengers survived?",
         "Plot passenger count by sex",
-        "Show survival count by passenger class",
         "Plot distribution of fares",
-        "Which class had the highest survival rate?",
     ]
 
     for q in example_questions:
@@ -85,9 +97,34 @@ with st.sidebar:
             st.session_state.pending_question = q
             st.rerun()
 
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+
     if st.button("Clear Chat"):
         st.session_state.chat_history = []
         st.rerun()
+    
+    st.markdown("<br>", unsafe_allow_html=True)
+
+    st.markdown(
+        """
+        <div style="
+            text-align:center;
+            padding:15px;
+            font-size:15px;
+            color:white;
+            opacity:0.7;
+        ">
+            Titanic Dataset Chat Agent<br>
+            Built with ❤️ by 
+            <a href="https://github.com/msaif2729" target="_blank" 
+            style="text-decoration:none; color:inherit; font-weight:bold;">
+            Saif Ansari
+            </a>
+        </div>
+        """,
+        unsafe_allow_html=True
+    )
 
 
 # Manual Chat Input
@@ -96,6 +133,7 @@ user_input = st.chat_input("Ask something about the Titanic dataset...")
 if user_input:
     st.session_state.pending_question = user_input
     st.rerun()
+
 
 # If There Is a Question to Process
 if st.session_state.pending_question:
@@ -107,7 +145,7 @@ if st.session_state.pending_question:
     st.session_state.chat_history.append(("user", question))
 
     # Display chat so far
-    for msg in st.session_state.chat_history:
+    for i, msg in enumerate(st.session_state.chat_history):
         if msg[0] == "user":
             with st.chat_message("user"):
                 st.write(msg[1])
@@ -115,7 +153,17 @@ if st.session_state.pending_question:
             with st.chat_message("assistant"):
                 st.write(msg[1])
                 if len(msg) > 2 and msg[2]:
-                    st.image(base64.b64decode(msg[2]))
+                    decoded_image = base64.b64decode(msg[2])
+                    st.image(decoded_image)
+
+                    # ✅ Unique key added here
+                    st.download_button(
+                        "Download Plot",
+                        data=decoded_image,
+                        file_name="titanic_plot.png",
+                        mime="image/png",
+                        key=f"download_history_{i}"
+                    )
 
     # Show spinner INSIDE chat
     with st.chat_message("assistant"):
@@ -125,18 +173,36 @@ if st.session_state.pending_question:
         answer = data.get("answer", "")
         image = data.get("image")
 
-        st.write(answer)
+        # Word-by-word typing
+        placeholder = st.empty()
+        full_text = ""
+
+        for word in answer.split():
+            full_text += word + " "
+            placeholder.markdown(full_text)
+            time.sleep(0.09)
 
         if image:
-            st.image(base64.b64decode(image))
+            decoded_image = base64.b64decode(image)
+            st.image(decoded_image)
+
+            # ✅ Unique key added here
+            st.download_button(
+                "Download Plot",
+                data=decoded_image,
+                file_name="titanic_plot.png",
+                mime="image/png",
+                key=f"download_new_{len(st.session_state.chat_history)}"
+            )
 
     # Save assistant message
     st.session_state.chat_history.append(("assistant", answer, image))
 
     st.stop()
 
+
 # Display Existing Chat
-for msg in st.session_state.chat_history:
+for i, msg in enumerate(st.session_state.chat_history):
     if msg[0] == "user":
         with st.chat_message("user"):
             st.write(msg[1])
@@ -144,4 +210,14 @@ for msg in st.session_state.chat_history:
         with st.chat_message("assistant"):
             st.write(msg[1])
             if len(msg) > 2 and msg[2]:
-                st.image(base64.b64decode(msg[2]))
+                decoded_image = base64.b64decode(msg[2])
+                st.image(decoded_image)
+
+                # ✅ Unique key added here
+                st.download_button(
+                    "Download Plot",
+                    data=decoded_image,
+                    file_name="titanic_plot.png",
+                    mime="image/png",
+                    key=f"download_existing_{i}"
+                )
