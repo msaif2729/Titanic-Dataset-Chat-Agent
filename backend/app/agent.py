@@ -1,3 +1,6 @@
+import matplotlib
+matplotlib.use("Agg")
+
 import os
 import io
 import base64
@@ -24,13 +27,12 @@ llm = ChatGroq(
     temperature=0
 )
 
-# -------------------------
 # TOOL 1: Data Analysis
-# -------------------------
 @tool
 def analyze_data(query: str) -> str:
     """
     Use this tool for answering analytical questions about the Titanic dataset.
+    Accepts ONLY valid pandas Python code.
     """
     try:
         local_vars = {"df": df, "pd": pd}
@@ -40,16 +42,13 @@ def analyze_data(query: str) -> str:
         return f"Error in analysis: {str(e)}"
 
 
-# -------------------------
 # TOOL 2: Visualization
-# -------------------------
 @tool
 def visualize_data(query: str) -> str:
     """
-    Creates plot from dataframe df.
-    Returns special marker instead of raw base64.
+    Executes valid matplotlib Python code using dataframe df.
+    The code must generate a plot.
     """
-
     try:
         local_vars = {"df": df, "plt": plt}
 
@@ -63,12 +62,10 @@ def visualize_data(query: str) -> str:
         image_base64 = base64.b64encode(buffer.read()).decode()
         plt.close()
 
-        # ⚠️ IMPORTANT: store image globally
         global LAST_IMAGE
         LAST_IMAGE = image_base64
 
-        # Return short marker instead of base64
-        return "__PLOT_GENERATED__"
+        return "Plot generated successfully."
 
     except Exception as e:
         return f"Error in visualization: {str(e)}"
@@ -81,15 +78,30 @@ tools = [analyze_data, visualize_data]
 prompt = ChatPromptTemplate.from_messages(
     [
         ("system",
-         "You are a data analyst working with a pandas dataframe named df. "
-         "For calculations use analyze_data tool and generate only valid pandas code. "
-         "For plots use visualize_data tool and generate only matplotlib code. "
-         "IMPORTANT RULES: "
-         "- Use ONLY the dataframe named df "
-         "- DO NOT import libraries "
-         "- DO NOT load datasets "
-         "- DO NOT use seaborn "
-         "- Generate only Python code, nothing else."
+         """
+        You are a data analyst working with a pandas dataframe named df.
+
+        CRITICAL RULES:
+        - When using analyze_data tool, you MUST pass ONLY valid pandas Python code.
+        - NEVER pass natural language into the tool.
+        - The input to analyze_data must be a valid Python expression.
+        - Example:
+            df['Sex'].value_counts(normalize=True).get('male', 0) * 100
+
+        When using visualize_data tool, you MUST pass ONLY matplotlib Python code.:
+        - ALWAYS include:
+            - plt.title()
+            - plt.xlabel()
+            - plt.ylabel()
+        - DO NOT use plt.show()
+        - DO NOT import matplotlib
+        - DO NOT explain anything.
+        - DO NOT include text.
+        - DO NOT include markdown.
+        - DO NOT use plt.show()
+        - ONLY raw Python code.
+        - Generate complete matplotlib plotting code.
+        """
         ),
         ("human", "{input}"),
         ("placeholder", "{agent_scratchpad}")
@@ -100,21 +112,29 @@ prompt = ChatPromptTemplate.from_messages(
 agent = create_tool_calling_agent(llm, tools, prompt)
 
 # Executor
-agent_executor = AgentExecutor(agent=agent, tools=tools, verbose=True)
+agent_executor = AgentExecutor(
+    agent=agent,
+    tools=tools,
+    verbose=True,
+    return_intermediate_steps=True
+)
 
-
+#Run Agent
 def run_agent(question: str):
-    response = agent_executor.invoke({"input": question})
-    output = response["output"]
+    global LAST_IMAGE
+    LAST_IMAGE = None
 
-    # Detect base64 image (very long string)
-    if isinstance(output, str) and len(output) > 1000:
+    response = agent_executor.invoke({"input": question})
+
+    # Check if visualization tool ran
+    if LAST_IMAGE is not None:
         return {
             "answer": "Here is the requested visualization:",
-            "image": output
+            "image": LAST_IMAGE
         }
 
+    # Otherwise normal text output
     return {
-        "answer": output,
+        "answer": response.get("output", ""),
         "image": None
     }
