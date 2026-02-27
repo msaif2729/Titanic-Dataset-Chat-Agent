@@ -40,7 +40,7 @@ def ask_backend(question):
         response = requests.post(
             API_URL,
             json={"question": question},
-            timeout=30
+            timeout=90
         )
 
         if response.status_code != 200:
