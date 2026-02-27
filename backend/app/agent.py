@@ -37,7 +37,10 @@ def analyze_data(query: str) -> str:
     try:
         local_vars = {"df": df, "pd": pd}
         result = eval(query, {}, local_vars)
-        return str(result)
+        if isinstance(result, pd.DataFrame):
+            return result.to_markdown(index=False)
+        else:
+            return str(result)
     except Exception as e:
         return f"Error in analysis: {str(e)}"
 
